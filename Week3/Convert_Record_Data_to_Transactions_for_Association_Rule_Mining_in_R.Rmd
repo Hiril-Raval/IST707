@@ -1,0 +1,130 @@
+---
+title: "Convert Record Data to Transactions for Association Rule Mining in R"
+author: "Bei Yu"
+date: "April 27, 2017"
+output: word_document
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Rationale
+The HW3 data set bankdata_csv_all.csv is in record data format. See below a snippet of the data:
+
+id,age,sex,region,income,married,children,car,save_act,current_act,mortgage,pep
+ID12101,48,FEMALE,INNER_CITY,17546,NO,1,NO,NO,NO,NO,pep=YES
+
+It can be directly loaded into Weka for AR mining, but the "arules" package in R does not accept record data as input. The record data has to be transformed into transaction data first. An example of transaction data:
+
+citrus fruit,semi-finished bread,margarine,ready soups
+tropical fruit,yogurt,coffee
+
+Two transformations are needed to convert the record data into transaction data. The first step is to convert all numeric variables to nominal, because AR mining can only analyze nominal data (whether an item occurs in a transaction or not). After that, the bank data might have duplicate items like "NO, NO, NO, NO", which should be converted to "married=NO, car=NO, save_act=NO, current_act=NO". 
+
+There are actually multiple ways to do the conversion. Amara and Tin found two different ways, which are summarized below.
+
+# Solution 1
+
+Amara's solution is a direct implementation of the aforementioned two-step conversion. 
+
+This solution used a package "plyr". Because new version "dplyr" is released, I tweaked the above code to fit dplyr by replacing the "revalue" function with the new "recode" function.
+
+## First, load the libraries
+```{r}
+library(plyr)
+library(dplyr)
+library(arules)
+```
+
+## Then, load the dataset
+```{r}
+bd = read.csv("/Users/byu/Desktop/Data/bankdata_csv_all.csv")
+str(bd)
+```
+
+## Then the first step of conversion: discretization and numeric-to-nominal transformation. 
+
+You can choose your own way of discretization and numeric-to-nominal conversion, like using different numbers of bins or equal-frequency discretization. Below is just one of many ways to transform the variables.
+
+### Discretize age by customized bin
+
+```{r}
+bd$age <- cut(bd$age, breaks = c(0,10,20,30,40,50,60,Inf),labels=c("child","teens","twenties","thirties","fourties","fifties","old"))
+```
+
+### Discretize income by equal-width bin
+
+```{r}
+min_income <- min(bd$income)
+max_income <- max(bd$income)
+bins = 3 
+width=(max_income - min_income)/bins;
+bd$income = cut(bd$income, breaks=seq(min_income, max_income, width))
+```
+
+### Convert numeric to nominal for "children"
+
+```{r}
+bd$children=factor(bd$children)
+```
+
+## Now the second step of conversion, changing "YES" to "[variable_name]=YES".
+
+```{r}
+bd$married=dplyr::recode(bd$married, YES="married=YES", NO="married=NO")
+bd$car=dplyr::recode(bd$car, YES="car=YES", NO="car=NO")
+bd$save_act=dplyr::recode(bd$save_act, YES="save_act=YES", NO="save_act=NO")
+bd$current_act=dplyr::recode(bd$current_act, YES="current_act=YES", NO="current_act=NO")
+bd$mortgage=dplyr::recode(bd$mortgage, YES="mortgage=YES", NO="mortgage=NO")
+bd$pep=dplyr::recode(bd$pep, YES="pep=YES", NO="pep=NO")
+```
+
+## Now load the transformed data into the apriori algorithm 
+
+```{r}
+myRules = apriori(bd, parameter = list(supp = 0.001, conf = 0.9, maxlen = 3))
+```
+# Solution 2
+
+Tin's solution used two packages "readr" and "dplyr", which provided some powerful data manipulation "verbs". See below his code:
+
+```{r}
+library(readr)
+library(dplyr)
+library(arules)
+```
+```{r}
+bankdata <- read_csv("/Users/byu/Desktop/Data/bankdata_csv_all.csv")
+```
+
+## Preprocess the data
+
+```{r}
+# drop the id variable
+# convert categorical variables to factor
+# discretize numeric variables
+bankdata <- bankdata %>% 
+  select(-id) %>% 
+  mutate_if(is.character, funs(as.factor)) %>% 
+  mutate_if(is.numeric, funs(discretize))
+```
+
+## Generate rules and explore
+
+```{r}
+# generate rules
+rules <- apriori(bankdata, parameter = list(supp = 0.001, conf = 0.9, maxlen = 4))
+```
+
+# Solution 3
+
+Use a Weka wrapper "RWeka" in R. See more usage details in the official tutorial: https://cran.r-project.org/web/packages/RWeka/RWeka.pdf
+
+```{r}
+library(RWeka)
+bankdata = read.csv("/Users/byu/Desktop/Data/bankdata_csv_all.csv")
+rules <- Apriori(bankdata, control = Weka_control(C = 0.8))
+```
+
+
