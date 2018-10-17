@@ -1,2 +1,2 @@
 # IST707
-Syracuse Uneiversity IST707 Data Analytics 
+Syracuse University IST707 Data Analytics 
