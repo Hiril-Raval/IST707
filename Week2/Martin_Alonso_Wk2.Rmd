@@ -1,0 +1,113 @@
+---
+title: "Martin_Alonso_Wk2"
+author: "Martin Alonso"
+date: "October 14, 2018"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# HW2 Instructions
+
+Here is a small dataset for you to work with.
+Each of 5 schools (A, B, C, D and E) is implementing the same math course this semester, with
+35 lessons. There are 30 sections total. The semester is about 3/4 of the way through.
+For each section, we record the number of students who are:
+• very ahead (more than 5 lessons ahead)
+• middling (5 lessons ahead to 0 lessons ahead)
+• behind (1 to 5 lessons behind)
+• more behind (6 to 10 lessons behind)
+• very behind (more than 10 lessons behind)
+• completed (finished with the course)
+
+What’s the story (or stories) in this data? Find it, and tell it visually and, above all, truthfully
+
+```{r tidy = TRUE}
+require(dplyr)
+require(ggplot2)
+require(tidyr)
+
+# First, load and explore the data set.
+dat <- read.csv('Data Storyteller.csv')
+
+head(dat)
+str(dat)
+summary(dat)
+```
+
+To simplify the data set, we'll change the column names. We also want to change 'section' into an nominal variable.
+```{r tidy = TRUE}
+names <- c('school', 'section', 'veryAhead5', 'middling0', 'behind15', 'moreBehind610', 'veryBehind11', 'completed')
+colnames(dat) <- names
+
+dat$section <- factor(dat$section)
+```
+
+Now we'll restructure the data set using tidyr principles, having one row per observation.
+```{r tidy = TRUE}
+tidyDat <- gather(dat, key = c(veryAhead5, middling0, behind15, moreBehind610, veryBehind11, completed), value = numStudents, c(-section, -school))
+colnames(tidyDat)[3] <- 'studentClass'
+tidyDat$studentClass <- factor(tidyDat$studentClass, levels = c('completed', 'veryAhead5', 'middling0', 'behind15', 'moreBehind610', 'veryBehind11'))
+```
+
+First thing we want to know is how many students there are per school and, on average, hov many students there are per class. 
+```{r tidy = TRUE}
+tidyDat %>% group_by(school) %>% summarize(numSections = max(as.numeric(section)), numStudents = sum(numStudents))
+
+# Despite having almost the same number of sections, school A has more than double the number of students that school B. 
+# How about number of students per class? 
+tidyDat %>% group_by(studentClass) %>% summarise(numStudents = sum(numStudents))
+
+# We know then, that the majority of students (47.1 percent) are behind in their maths lessons.
+```
+
+So far, we can assume that three-quarters of the way into the school year, the program is not really effective as the vast majority of students are behind in their courses. However, we can't dismiss the fact that the second largest group (19.7 percent) of students have completed all their courses. 
+
+Let's start breaking down the data set using visualizations. 
+```{r tidy = TRUE}
+# Let's look at the distribution of students across the different classes. 
+ggplot(tidyDat, aes(x = studentClass, y = numStudents, fill = studentClass)) + geom_bar(stat = 'identity') + labs(x = 'Class', y = 'Number of Students', fill = 'Class') + ggtitle('Number of Students by Class') + theme(axis.text.x = element_text(angle = 15))
+
+# Not much has changed, it's the same conclusion we've gotten so far. 
+
+# We can see that the number of students is significantly higher for those in the Behind -1-5 group. Let's see if the same distribution holds among the five schools.
+tidyDat %>% group_by(school, studentClass) %>% summarise(numStudents = sum(numStudents)) %>% ggplot(aes(x = studentClass, y = numStudents, fill = studentClass)) + geom_bar(stat = 'identity') + facet_wrap(~ school) + labs(x = 'Class', y = 'Number of Students', fill = 'Class') + ggtitle('Number of Students by Class', subtitle = 'By School') + coord_flip() + theme(axis.text.x = element_text(angle = 90))
+```
+
+Once we open the data up by school, we start finding much more interesting trends. The first thing that pops out is school A's large number of students who are behind in their maths courses. With 450 students behind by one to five courses (and 677 behind in total), the program doesn't appear to be succesful in school A. 
+But, that narrative changes when we turn our attention to the other schools. Were school A has a 72.6 behind rate, the rest of the schools have a 57.7 percent behind rate. Furthermore, school A has a 15.2 completed rate, while the rest of schools have a 26.0 percent completed rate. This seems to point that the problem is not the program in and of itself, but to a problem with school A! 
+
+This raises many follow-up questions. Is there a correlation between the number of sections and number of students behind? How are students distributed by section in school A? Are there any outliers?  
+
+```{r tidy = TRUE}
+tidyDat %>% filter(studentClass == 'behind15') %>% group_by(school) %>% summarise(numSections = max(as.numeric(section)), numStudents = sum(numStudents)) %>% 
+  ggplot(aes(x = numSections, y = numStudents, size = numStudents)) + geom_point() + geom_smooth(method = 'lm', colour = 'red', se = FALSE) + labs(x = 'Number of Sections', y = 'Number of Students', size = 'Number of Students') + ggtitle('Number of Students per number of Sections', subtitle = 'Students Behind -1-5')
+
+# There seems to be an apparent relationship between the number of sections and number of students (r-squeared = 0.796). But this is not that clear from the graph. Let's convert the y-scale to a logarithm.
+tidyDat %>% filter(studentClass == 'behind15') %>% group_by(school) %>% summarise(numSections = max(as.numeric(section)), numStudents = sum(numStudents)) %>% 
+  ggplot(aes(x = numSections, y = numStudents, size = numStudents)) + geom_point() + geom_smooth(method = 'lm', colour = 'red', se = FALSE) + scale_y_log10() + labs(x = 'Number of Sections', y = 'log Number of Students', size = 'Number of Students') + ggtitle('Log Number of Students per number of Sections', subtitle = 'Students Behind -1-5')
+ 
+# There's a much clearer relationship but the data set is so small that it may not be wise to conclude that these two variables are correlated. 
+
+# What about if we looked at the numbers for students who have completed their maths courses. 
+tidyDat %>% filter(studentClass == 'completed') %>% group_by(school) %>% summarise(numSections = max(as.numeric(section)), numStudents = sum(numStudents)) %>% 
+    ggplot(aes(x = numSections, y = numStudents, size = numStudents)) + geom_point() + geom_smooth(method = 'lm', colour = 'red', se = FALSE) + labs(x = 'Number of Sections', y = 'Number of Students', size = 'Number of Students') + ggtitle('Number of Students per number of Sections', subtitle = 'Students Completed')
+```
+So the number of sections does affect the number of students who either complete their courses or are behind. Then again, just because there are more sections does not mean that this causes more students to complete or lag in their courses. 
+
+Let's look at the distribution for students behind for all sections of school A. 
+```{r tidy = TRUE}
+tidyDat %>% filter(school == 'A' & studentClass %in% c('behind15', 'moreBehind610', 'veryBehind11')) %>% ggplot(aes(x = studentClass, y = numStudents)) + geom_boxplot() + labs(x = 'Classes', y = 'Number of Students') + ggtitle('Student distribution per Class', subtitle = 'School A')
+
+# There seem to be no outliers that are driving School A to have such high numbers of students lagging behind. However, we can say that the largest section has nearly 55 students lagging behind while the smallest section has a bit over 15. With a median of 35 students and an average of 34.6 students, this explains that the number of sections is driving school A's high numbers. 
+```
+
+How do the numbers compare when looking at all schools? 
+```{r tidy = TRUE}
+tidyDat %>% filter(studentClass %in% c('behind15')) %>% ggplot(aes(x = school, y = numStudents)) + geom_boxplot() + labs(x = 'School', y = 'Number of Students') + ggtitle('Distribution of students per school', subtitle = 'Students behind -1-5')
+```
+
+So, there's no real explanation why school A is driving up the numbers other than they have more students and sections - something evident by the fact that school E has one section with 56 students lagging behind by 1 to 5 courses. 
+Other than that, there are no outliers nor anything that jumps out when trying to explain why class A has more students lagging above the average. 
