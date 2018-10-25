@@ -1,0 +1,102 @@
+---
+title: "Martin_Alonso_Hw3"
+author: "Martin Alonso"
+date: "October 20, 2018"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# HW3 Instructions
+For this homework, we are going to explore the bank data, available on the LMS, and an
+accompanying description of the attributes and their values. The dataset contains
+attributes on each person’s demographics and banking information in order to determine
+they will want to obtain the new PEP (Personal Equity Plan).
+Your goal is to perform Association Rule discovery on the dataset using Weka.
+
+```{r tidy=TRUE}
+require(RWeka)
+require(arules)
+require(arulesViz)
+require(dplyr)
+```
+
+## Loading the data set, exploring, and cleaning
+Before we start doing association rules mining, we need to load the required data set - `bankdata_csv_all.csv` -, explore it, and clean it.
+
+```{r tidy=TRUE}
+dat <- read.csv('bankdata_csv_all.csv', stringsAsFactors = FALSE)
+
+# Check the structure, summary, and head of the data set. 
+str(dat)
+summary(dat)
+head(dat)
+```
+
+Now that we have checked the data set, we'll start cleaning it. 
+We need to eliminate the `id` variable and convert the numeric fields into ordinal variables. 
+
+```{r tidy=TRUE}
+# Drop the id column
+datClean <- dat[, 2:12]
+
+# Convert numeric variable to ordinal. 
+for(i in 1:ncol(datClean)){
+  if(class(datClean[[i]]) != 'factor'){
+    datClean[[i]] <- as.factor(datClean[[i]])
+  }
+}
+```
+
+With the data converted, we can start exploring different rules. 
+
+## Association Rules Mining
+
+```{r tidy=TRUE}
+# We set the support and confidence parameters to 0.35 and 0.60, respectively, to obtain 42 sets of rules. 
+rules <- apriori(datClean, parameter = list(supp = .25, conf = .70))
+
+# Let's explore the rules. 
+summary(rules)
+
+# We find that the minimum lift is 0.98, while the maximum lift is 1.13, giving us a good set of robust rules, while also throwing in the mix some independent associations. 
+# Let's see the top 10 rules that we have found. 
+options(digits = 3)
+rules <- sort(rules, decreasing = TRUE, by = 'lift')
+inspect(rules[1:10])
+
+# The top rule has lift of 1.24, showing that if you don't have a mortgage nor pep, chances are you're likely married. Interesting as the rule might give the idea that these are causes of people getting married.
+```
+
+## PEP analysis
+Now, let's explore what rules can explain whether a customer takes a PEP or not. 
+```{r tidy=TRUE}
+datTransactions <- as(datClean, 'transactions')
+
+pepRules <- apriori(datTransactions, parameter = list(maxlen = 4), 
+                    appearance = list(rhs = c("pep=YES", "pep=NO")))
+inspect(pepRules)
+```
+
+This is very interesting. If we focus solely on the bottom four rules, we find that not only these have `pep=NO` on the RHS but, on the LHS, they all share the same rule: No children. This can mean that married couples with no children have less expenses, therefore they don't need a personal equity plan. 
+Similarly, these couples don't have mortgages, cars, or savings accounts. 
+
+```{r tidy=TRUE}
+plot(pepRules[7:10], method = 'graph')
+```
+
+These four rules are very interesting and, given that they all have high lift and confidence levels above 0.80, I would personally advise not to offer Personal Equity Plans to couples who don't have children. 
+
+```{r tidy=TRUE}
+plot(pepRules[1:6], method = 'graph')
+```
+
+However, couple who do have children are likelier to take out a PEP, making them a prime target to offer this product. But, I would also add that, among parents, those who currently have an account plus a savings account, are far more likely to have a PEP than those who don't. 
+This is clear because, among the set of rules for people who do have a PEP, those who have childern, savings accounts, and other accounts have a confidence of 0.86 and the highest lift out of all the rules with 1.89; meaning that having a PEP is dependent on having the prior three things. 
+
+```{r tidy=TRUE}
+inspect(sort(pepRules[6:10], decreasing = TRUE, by = 'lift'))
+```
+
