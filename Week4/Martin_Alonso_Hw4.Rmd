@@ -1,23 +1,18 @@
 ---
 title: "Martin_Alonso_Hw4"
+always_allow_html: yes
 author: "Martin Alonso"
 date: "October 29, 2018"
-output: word_document
+output:
+  word_document: default
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-#Hw4 Instructions
-You are going to try solving this mystery using clustering algorithms k-Means, EM, and
-HAC. Document your analysis process and draw your conclusion on who wrote the disputed
-essays. Provide evidence for each method to demonstrate what patterns had been learned to
-predict the disputed papers, for example, visualize the clustering results and show where the
-disputed papers are located in relation to Hamilton and Madison's papers. By the way, where are
-the papers with joint authorship located? For k-Means and EM, analyze the centroids to explain
-which attributes are most useful for clustering. Hint: the centroid values on these dimensions
-should be far apart from each other to be able to distinguish the clusters.
+#Hw4 Instructions  
+You are going to try solving this mystery using clustering algorithms k-Means, EM, and HAC. Document your analysis process and draw your conclusion on who wrote the disputed essays. Provide evidence for each method to demonstrate what patterns had been learned to predict the disputed papers, for example, visualize the clustering results and show where the disputed papers are located in relation to Hamilton and Madison's papers. By the way, where are the papers with joint authorship located? For k-Means and EM, analyze the centroids to explain which attributes are most useful for clustering. Hint: the centroid values on these dimensions should be far apart from each other to be able to distinguish the clusters.  
 
 ```{r tidy = TRUE}
 require(stats)
@@ -25,11 +20,10 @@ require(cluster)
 require(dplyr)
 require(ggvis)
 require(tidyr)
-require(EMCluster)
-```
-
-## Loading the data
-Let's load the data and do an initial analysis of the contents of the data set. 
+```  
+  
+## Loading the data  
+Let's load the data and do an initial analysis of the contents of the data set.  
 ```{r tidy = TRUE}
 feds <- read.csv('fedPapers85.csv')
 
@@ -42,20 +36,18 @@ dim(feds)
 head(feds)
 
 # Having said that, the first two columns are nominal, while the remaining columns are numeric. 
-str(feds)
+str(feds[, 1:6])
 
-# We can see that there are no missing values in the data set. Likewise, as the introduction stated, there are 11 disputed texts; while the rest have assigned authors. 
-summary(feds)
+table(sapply(feds, class))
+```  
+  
+Having done an initial assessment of the data, we can proceed to test different clustering methods that might give as a clue as to who is (or are) the trre author of the disputed texts.   
 
-```
+## Cluster analysis.  
+We shall do three types of clustering analysis: k-means, EM, and HAC.   
 
-Having done an initial assessment of the data, we can proceed to test different clustering methods that might give as a clue as to who is (or are) the trre author of the disputed texts. 
-
-## Cluster analysis. 
-We shall do three types of clustering analysis: k-means, EM, and HAC. 
-
-### 1. k-means
-We'll start using the k-means algorithm by selecting three centroids. The reason why we choose three centroids is because there are four unique authors: Hamilton, Madison, and Jay. We want to check to which of these groups the 11 disputed papers belongs to. 
+### 1. k-means  
+We'll start using the k-means algorithm by selecting three centroids. The reason why we choose three centroids is because there are four unique authors: Hamilton, Madison, and Jay. We want to check to which of these groups the 11 disputed papers belongs to.  
 ```{r tidy = TRUE}
 # Check how many unique authors there are. We disregard disputed papers as an author as we want to identify who the real author might be. 
 unique(feds$author)
@@ -86,17 +78,17 @@ fedsCluster <- cbind(feds, k1$cluster)
 colnames(fedsCluster)[73] <- 'cluster'
 fedsClusterClean <- fedsCluster %>% group_by(author, cluster) %>% summarise(number = n()) 
 spread(fedsClusterClean, key = cluster, value = number)
-```
+``` 
+  
+It appears that the clusters have done a better job than what was apparent. K-means successfully grouped all of Jay's texts into a single cluster without adding any of the other texts. And, though it has missed on the mark for the other texts, there is some value to rescue.  
+Cluster 1 houses over half of Hamilton's and Madison's texts and under half of the disputed texts. This may mean that the disputed texts are entirely attributable to Hamilton but he uses similar words to those of Madison.   
+Cluster 3, however, encompasses the three joint author texts and the remaining texts by both Hamilton and Madison. Having also the majority of the disputed texts, there is no clear distinction as to whether the disputed texts might be further evidence of collaboration, or the usage of similar words by two different authors.   
+  
+### 2. EM  
+  
 
-It appears that the clusters have done a better job than what was apparent. K-means successfully grouped all of Jay's texts into a single cluster without adding any of the other texts. And, though it has missed on the mark for the other texts, there is some value to rescue.
-Cluster 1 houses over half of Hamilton's and Madison's texts and under half of the disputed texts. This may mean that the disputed texts are entirely attributable to Hamilton but he uses similar words to those of Madison. 
-Cluster 3, however, encompasses the three joint author texts and the remaining texts by both Hamilton and Madison. Having also the majority of the disputed texts, there is no clear distinction as to whether the disputed texts might be further evidence of collaboration, or the usage of similar words by two different authors. 
-
-### 2. EM
-
-
-### 3. HAC
-We'll now look at how the documents cluster through a heirarchical clustering algorithm (HAC). 
+### 3. HAC  
+We'll now look at how the documents cluster through a heirarchical clustering algorithm (HAC).  
 ```{r tidy = TRUE}
 # We'll first build two different groups of clusters: one using the complete method and the other the average, so as to compare how the clusters form. 
 clusComp <- hclust(dist(feds[, 3:72]), method = 'complete')
@@ -108,22 +100,22 @@ clusAvg
 
 # Time to graph the clusters and see how they compare to the k-means algorithm. 
 plot(clusComp, hang = -1, cex = 0.6, main = "Federalist Papers Cluster - Complete", label = feds$author)
-```
-
-From this first graph, we can see that Jay's papers are all grouped together to the left side of the dendogram. No problem there as it keeps up with the k-means algorithm. 
-However, as we start looking to the right, we find that Hamilton and Madison's papers are intertwined, with their three co-authored papers stacked between Madison's papers. A conclusion we can draw from this is that, though the papers were co-authored, Madison may have done the actual writing, something that would explain why they are grouped together. 
-Also within this first section, we find several of the disputed papers grouped with Madison. These 8 papers seem to be authored by Madison; whilst a group of three papers at the far right of the dendogram seem to be attrubitable to Hamilton. 
-
-Let's see how the clusters form if we use the 'average' method. 
+```  
+  
+From this first graph, we can see that Jay's papers are all grouped together to the left side of the dendogram. No problem there as it keeps up with the k-means algorithm.  
+However, as we start looking to the right, we find that Hamilton and Madison's papers are intertwined, with their three co-authored papers stacked between Madison's papers. A conclusion we can draw from this is that, though the papers were co-authored, Madison may have done the actual writing, something that would explain why they are grouped together.  
+Also within this first section, we find several of the disputed papers grouped with Madison. These 8 papers seem to be authored by Madison; whilst a group of three papers at the far right of the dendogram seem to be attrubitable to Hamilton.  
+  
+Let's see how the clusters form if we use the 'average' method.  
 ```{r tidy = TRUE}
-'plot(clusAvg, hang = -1, cex = 0.6, main = "Federalist Papers Cluster - Average", label = feds$author)'
-```
+plot(clusAvg, hang = -1, cex = 0.6, main = "Federalist Papers Cluster - Average", label = feds$author)
+```  
 
 Again, from this graph, we can see that the Jay papers are grouped together, followed by the Hamilton-Madison papers. This gives us a different idea that the one we saw in the previous graph; the language use is completely different from a pure Hamilton or Madison verbiage. 
 However, we then find Madison's papers are interspersed with Hamilton's papers, with many of the disputed papers crunched in between. There are some papers that can be argued to be authored by Hamilton, and other by Madison; but if we look at the far right of the dendogram, we find that there are seven papers grouped together with a couple of Hamilton papers and five Madison papers. These papers might be tougher to determine true authorship, though one could argue that they could be attributed to Madison. 
 
 ##Conclusions
-Though the initial k-means algorithm gave us a clear idea of how the papers were grouped, in the end the Hamilton, Madison, and disputed papers were so grouped together that we could not descern any true authorship. 
-EM
-The HAC algorithm, however, provided more insight into how the papers were being grouped, with the complete method showing that they could be more likely attributed to Madison, while the average method showed that some of the papers were more likely to be authored by Hamilton, some by Madison, and a couple that could yet be determined since the language used is very similar to that by both authors. 
-Perhaps, to this effect, these 11 papers could be a mix of co-authored papers or a very realistic attempt of both authors copying each other's writing style, which in effect makes identifying a true author an even more difficult task. 
+Though the initial k-means algorithm gave us a clear idea of how the papers were grouped, in the end the Hamilton, Madison, and disputed papers were so grouped together that we could not descern any true authorship.  
+EM  
+The HAC algorithm, however, provided more insight into how the papers were being grouped, with the complete method showing that they could be more likely attributed to Madison, while the average method showed that some of the papers were more likely to be authored by Hamilton, some by Madison, and a couple that could yet be determined since the language used is very similar to that by both authors.   
+Perhaps, to this effect, these 11 papers could be a mix of co-authored papers or a very realistic attempt of both authors copying each other's writing style, which in effect makes identifying a true author an even more difficult task.   
