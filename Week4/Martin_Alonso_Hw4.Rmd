@@ -96,3 +96,34 @@ Cluster 3, however, encompasses the three joint author texts and the remaining t
 
 
 ### 3. HAC
+We'll now look at how the documents cluster through a heirarchical clustering algorithm (HAC). 
+```{r tidy = TRUE}
+# We'll first build two different groups of clusters: one using the complete method and the other the average, so as to compare how the clusters form. 
+clusComp <- hclust(dist(feds[, 3:72]), method = 'complete')
+clusAvg <- hclust(dist(feds[, 3:72]), method = 'average')
+
+# We can see that both groups use Euclidean distance and present 85 observations, but the cluster method varies. 
+clusComp
+clusAvg
+
+# Time to graph the clusters and see how they compare to the k-means algorithm. 
+plot(clusComp, hang = -1, cex = 0.6, main = "Federalist Papers Cluster - Complete", label = feds$author)
+```
+
+From this first graph, we can see that Jay's papers are all grouped together to the left side of the dendogram. No problem there as it keeps up with the k-means algorithm. 
+However, as we start looking to the right, we find that Hamilton and Madison's papers are intertwined, with their three co-authored papers stacked between Madison's papers. A conclusion we can draw from this is that, though the papers were co-authored, Madison may have done the actual writing, something that would explain why they are grouped together. 
+Also within this first section, we find several of the disputed papers grouped with Madison. These 8 papers seem to be authored by Madison; whilst a group of three papers at the far right of the dendogram seem to be attrubitable to Hamilton. 
+
+Let's see how the clusters form if we use the 'average' method. 
+```{r tidy = TRUE}
+'plot(clusAvg, hang = -1, cex = 0.6, main = "Federalist Papers Cluster - Average", label = feds$author)'
+```
+
+Again, from this graph, we can see that the Jay papers are grouped together, followed by the Hamilton-Madison papers. This gives us a different idea that the one we saw in the previous graph; the language use is completely different from a pure Hamilton or Madison verbiage. 
+However, we then find Madison's papers are interspersed with Hamilton's papers, with many of the disputed papers crunched in between. There are some papers that can be argued to be authored by Hamilton, and other by Madison; but if we look at the far right of the dendogram, we find that there are seven papers grouped together with a couple of Hamilton papers and five Madison papers. These papers might be tougher to determine true authorship, though one could argue that they could be attributed to Madison. 
+
+##Conclusions
+Though the initial k-means algorithm gave us a clear idea of how the papers were grouped, in the end the Hamilton, Madison, and disputed papers were so grouped together that we could not descern any true authorship. 
+EM
+The HAC algorithm, however, provided more insight into how the papers were being grouped, with the complete method showing that they could be more likely attributed to Madison, while the average method showed that some of the papers were more likely to be authored by Hamilton, some by Madison, and a couple that could yet be determined since the language used is very similar to that by both authors. 
+Perhaps, to this effect, these 11 papers could be a mix of co-authored papers or a very realistic attempt of both authors copying each other's writing style, which in effect makes identifying a true author an even more difficult task. 
