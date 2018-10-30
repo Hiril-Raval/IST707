@@ -4,7 +4,8 @@ always_allow_html: yes
 author: "Martin Alonso"
 date: "October 29, 2018"
 output:
-  word_document: default
+  word_document:
+    fig_width: 6
 ---
 
 ```{r setup, include=FALSE}
@@ -12,7 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 #Hw4 Instructions  
-You are going to try solving this mystery using clustering algorithms k-Means, EM, and HAC. Document your analysis process and draw your conclusion on who wrote the disputed essays. Provide evidence for each method to demonstrate what patterns had been learned to predict the disputed papers, for example, visualize the clustering results and show where the disputed papers are located in relation to Hamilton and Madison's papers. By the way, where are the papers with joint authorship located? For k-Means and EM, analyze the centroids to explain which attributes are most useful for clustering. Hint: the centroid values on these dimensions should be far apart from each other to be able to distinguish the clusters.  
+You are going to try solving this mystery using clustering algorithms k-Means and HAC. Document your analysis process and draw your conclusion on who wrote the disputed essays. Provide evidence for each method to demonstrate what patterns had been learned to predict the disputed papers, for example, visualize the clustering results and show where the disputed papers are located in relation to Hamilton and Madison's papers. By the way, where are the papers with joint authorship located? For k-Means analyze the centroids to explain which attributes are most useful for clustering. Hint: the centroid values on these dimensions should be far apart from each other to be able to distinguish the clusters.  
 
 ```{r tidy = TRUE}
 require(stats)
@@ -44,7 +45,7 @@ table(sapply(feds, class))
 Having done an initial assessment of the data, we can proceed to test different clustering methods that might give as a clue as to who is (or are) the trre author of the disputed texts.   
 
 ## Cluster analysis.  
-We shall do three types of clustering analysis: k-means, EM, and HAC.   
+We shall do three types of clustering analysis: k-means and HAC.   
 
 ### 1. k-means  
 We'll start using the k-means algorithm by selecting three centroids. The reason why we choose three centroids is because there are four unique authors: Hamilton, Madison, and Jay. We want to check to which of these groups the 11 disputed papers belongs to.  
@@ -84,10 +85,7 @@ It appears that the clusters have done a better job than what was apparent. K-me
 Cluster 1 houses over half of Hamilton's and Madison's texts and under half of the disputed texts. This may mean that the disputed texts are entirely attributable to Hamilton but he uses similar words to those of Madison.   
 Cluster 3, however, encompasses the three joint author texts and the remaining texts by both Hamilton and Madison. Having also the majority of the disputed texts, there is no clear distinction as to whether the disputed texts might be further evidence of collaboration, or the usage of similar words by two different authors.   
   
-### 2. EM  
-  
-
-### 3. HAC  
+### 2. HAC  
 We'll now look at how the documents cluster through a heirarchical clustering algorithm (HAC).  
 ```{r tidy = TRUE}
 # We'll first build two different groups of clusters: one using the complete method and the other the average, so as to compare how the clusters form. 
@@ -116,6 +114,5 @@ However, we then find Madison's papers are interspersed with Hamilton's papers, 
 
 ##Conclusions
 Though the initial k-means algorithm gave us a clear idea of how the papers were grouped, in the end the Hamilton, Madison, and disputed papers were so grouped together that we could not descern any true authorship.  
-EM  
 The HAC algorithm, however, provided more insight into how the papers were being grouped, with the complete method showing that they could be more likely attributed to Madison, while the average method showed that some of the papers were more likely to be authored by Hamilton, some by Madison, and a couple that could yet be determined since the language used is very similar to that by both authors.   
 Perhaps, to this effect, these 11 papers could be a mix of co-authored papers or a very realistic attempt of both authors copying each other's writing style, which in effect makes identifying a true author an even more difficult task.   
