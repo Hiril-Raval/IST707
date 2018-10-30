@@ -1,0 +1,98 @@
+---
+title: "Martin_Alonso_Hw4"
+author: "Martin Alonso"
+date: "October 29, 2018"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Hw4 Instructions
+You are going to try solving this mystery using clustering algorithms k-Means, EM, and
+HAC. Document your analysis process and draw your conclusion on who wrote the disputed
+essays. Provide evidence for each method to demonstrate what patterns had been learned to
+predict the disputed papers, for example, visualize the clustering results and show where the
+disputed papers are located in relation to Hamilton and Madison's papers. By the way, where are
+the papers with joint authorship located? For k-Means and EM, analyze the centroids to explain
+which attributes are most useful for clustering. Hint: the centroid values on these dimensions
+should be far apart from each other to be able to distinguish the clusters.
+
+```{r tidy = TRUE}
+require(stats)
+require(cluster)
+require(dplyr)
+require(ggvis)
+require(tidyr)
+require(EMCluster)
+```
+
+## Loading the data
+Let's load the data and do an initial analysis of the contents of the data set. 
+```{r tidy = TRUE}
+feds <- read.csv('fedPapers85.csv')
+
+# Exploring the data set. 
+dim(feds)
+
+# We can see that the dataset has 85 observations - one for each paper - and 72 variables. 
+
+# If we check the six first rows, we can see that the first two columns refer to the author of the text and the text itself. Columns three and so forth refer to the frequency of letters occurring in the text. 
+head(feds)
+
+# Having said that, the first two columns are nominal, while the remaining columns are numeric. 
+str(feds)
+
+# We can see that there are no missing values in the data set. Likewise, as the introduction stated, there are 11 disputed texts; while the rest have assigned authors. 
+summary(feds)
+
+```
+
+Having done an initial assessment of the data, we can proceed to test different clustering methods that might give as a clue as to who is (or are) the trre author of the disputed texts. 
+
+## Cluster analysis. 
+We shall do three types of clustering analysis: k-means, EM, and HAC. 
+
+### 1. k-means
+We'll start using the k-means algorithm by selecting three centroids. The reason why we choose three centroids is because there are four unique authors: Hamilton, Madison, and Jay. We want to check to which of these groups the 11 disputed papers belongs to. 
+```{r tidy = TRUE}
+# Check how many unique authors there are. We disregard disputed papers as an author as we want to identify who the real author might be. 
+unique(feds$author)
+# Since there are three authors, we will work with three centroids. 
+
+# Now, we'll create a new data set in which the author and text columns are removed. 
+fedsClean <- feds[, 3:72]
+
+set.seed(825)
+k1 <- kmeans(fedsClean, 3)
+k1$size
+
+# We seem to have run into an unexpected grouping as the sizes of the clusters are not what was expected. Let's plot the clusters to see how they compare. 
+clusplot(fedsClean, k1$cluster, color = T, shade = F, labels = 0, lines = 0)
+
+# We can clearly see that there is overlap between the four clusters. Perhaps a better approach would be to do an elbow chart and determine the ideal number of centroids to use. 
+wss <- kmeans(fedsClean, centers = 1)$tot.withinss
+for (i in 3:72){
+  wss[i] <- kmeans(fedsClean, centers = i)$tot.withinss
+}
+sse <- data.frame(c(1:72), c(wss))
+colnames(sse) <- c('Clusters', 'SSE')
+sse %>% ggvis(~Clusters, ~SSE) %>% layer_points(fill := 'blue') %>% layer_lines()
+
+# There is no clear point where ideal sets of clusters would converge. 
+# In any case, if we stick to the four original clusters we chose, then the resulting papers would be grouped the following way: 
+fedsCluster <- cbind(feds, k1$cluster)
+colnames(fedsCluster)[73] <- 'cluster'
+fedsClusterClean <- fedsCluster %>% group_by(author, cluster) %>% summarise(number = n()) 
+spread(fedsClusterClean, key = cluster, value = number)
+```
+
+It appears that the clusters have done a better job than what was apparent. K-means successfully grouped all of Jay's texts into a single cluster without adding any of the other texts. And, though it has missed on the mark for the other texts, there is some value to rescue.
+Cluster 1 houses over half of Hamilton's and Madison's texts and under half of the disputed texts. This may mean that the disputed texts are entirely attributable to Hamilton but he uses similar words to those of Madison. 
+Cluster 3, however, encompasses the three joint author texts and the remaining texts by both Hamilton and Madison. Having also the majority of the disputed texts, there is no clear distinction as to whether the disputed texts might be further evidence of collaboration, or the usage of similar words by two different authors. 
+
+### 2. EM
+
+
+### 3. HAC
