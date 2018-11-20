@@ -1,0 +1,134 @@
+---
+title: "Martin_Alonso_Hw5"
+author: "Martin Alonso"
+date: "November 5, 2018"
+output: 
+  word_document:
+    fig_width: 6
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Hw5 Instructions
+In this homework assignment, you are going to use the decision tree algorithm to solve the disputed essay problem. Last week you used clustering techniques to tackle this problem.  
+  
+## 1. Data Preparation  
+We'll start by loading the necesary packages to work with data partitioning, model design, and graphics outputs. 
+```{r tidy = TRUE}
+require(caret)
+require(dplyr)
+require(ggplot2)
+require(rpart)
+require(rpart.plot)
+require(e1071)
+```
+
+With the packages now loaded, it's time to load the data. Since this is the same dataset as last week's homework, we'll eschew from checking the summary, structure, and head of the dataset.  
+```{r tidy = TRUE}
+dat <- read.csv('fedPapers85.csv')
+```
+
+Now, we'll separate the dataset into three group: 
+1. Training set
+2. Testing set
+3. Verification set - the disputed papers
+
+We'll extract the disputed papers from the set as we want to know if the model can predict to who these belong to. 
+
+The training set will consist of 2/3 of the dataset after the verification set has been removed; and the test set will be the remaining 1/3. 
+
+During the Prediction part, we'll test the model with the 
+
+```{r tidy = TRUE}
+fed <- dat %>% filter(author != 'dispt')
+fed$author <- as.factor(as.character(fed$author))
+
+# Randomly select 2/3 of the dataset - these will be the training set. 
+split <- sample(nrow(fed), nrow(fed) * 2/3)
+train <- fed[split, ]
+test <- fed[-split, ]
+
+# The verification set,
+ver <- dat %>% filter(author == 'dispt')
+```
+
+Now that we have our datasets split, time to build and train the model. 
+
+## 2. Build and tune decision tree models
+```{r tidy = TRUE}
+# We'll create a first tree using rpart. We exclude the filename variable as it is a factor and doesn't add much to the decision tree. 
+feds.tree <- rpart(author ~ . - filename, data = train, method = 'class', control = rpart.control(cp = 0))
+
+# Without actually pruning the tree, let's check how the model works
+rpart.plot(feds.tree)
+
+# And also look under the hood.
+summary(feds.tree)
+```
+
+We can see that the model has a starting node as Hamilton - 71 percent of the texts in the training set belong to Hamilton. From there, the model asks whether tho word 'upon' is used above 1.9 percent. If the 'upon' appears more frequently, then the model asigns the paper to Hamilton.
+But, if 'upon' is used less than 1.9 percent, then the model immediately ascribes the text to Madison. 
+It is interesting that - at this point in the model - no papers are assigned to Jay or to the dual Hamilton-Madison papers. The model will have to be tuned to fix this. 
+Furthermore, when checking the model summary, we find that at two splits, the relative error of the model is 0.429. This is not desirable as we want a more accurate model. 
+
+```{r tidy = TRUE}
+# We'll set a minimum split of 10 papers in a bucket, and a max depth of 4 leaf nodes, and check how the model works from there. 
+feds.tree2 <- rpart(author ~ . - filename, data = train, method = 'class', control = rpart.control(cp = 0, minsplit = 10, maxdepth = 4))
+
+rpart.plot(feds.tree2)
+
+summary(feds.tree2)
+```
+
+This tree is much more accurate, producing a relative error of 0.143 at two splits. We also see that the tree further elaborates beyond the Madison leaf node, going so far as to identify the Jay papers. 
+Returning to the Madison leaf node, if the author uses 'been' less than 5.3 percent of the time, then it is a Jay paper. Anything more is still attributed to Madison.
+Unfortunately, the model is still failing to determine the Hamilton-Madison papers, and we see that it's struggling to correctly identify the Jay papers, as only 67 percent of the papers attributed to Jay are in fact his. 
+
+```{r tidy = TRUE}
+# Let's reduce the minimum split to five, while also increasing the max depth to five. 
+feds.tree3 <- rpart(author ~ . - filename, data = train, method = 'class', control = rpart.control(cp = 0, minsplit = 5, maxdepth = 5))
+
+rpart.plot(feds.tree3, cex = 0.8)
+
+summary(feds.tree3)
+```
+
+This model gives us a relative error of 0.071, which is amamzing. Most of the papers are being assigned correctly to Hamilton, Jay, and Madison. However, at the first Jay node, if the word 'also' appears less than one percent of the time, the model assigns the text to Hamilton with a 50 percent probability of getting it right. We can assume that both Hamilton's and the Hamilton Madison papers are being classified here. 
+
+Let's check the cp plot and see how the model works on the test set. 
+```{r tidy = TRUE}
+plotcp(feds.tree3)
+
+# Now we'll use this model to predict the test set. 
+test_pred <- data.frame(predict(feds.tree3, newdata = test))
+
+# Some data transformation needs to be done to check the confusion matrix.
+results <- test_pred %>% mutate(results = ifelse(Madison == 1, 'Madison', ifelse(Hamilton == 1, 'Hamilton', ifelse(Jay == 1, 'Jay', 'HM'))))
+# I'm introducing some bias here as I'm explicitly stating that if none of the rules apply to the results, then the result should be HM This will cause some texts which are 50-50 to be classified as HM. 
+
+row.names(test) <- NULL
+testResult <- test %>% bind_cols(results)
+testResult$results <- as.factor(testResult$results)
+
+confusionMatrix(testResult$result, testResult$author)
+
+```
+
+The results are really good! By checking the confusion matrix, we find that the model correctly assigns the Hamilt, Jay , and Madison texts to each author. The issue lies with the HM papers which are either HM or disputed papers. Not bad for a very simple classifier.
+
+
+## 3. Prediction
+But, we have one more test to actually see how the model fares: can the model predict who the disputed texts belong to? 
+
+```{r tidy = TRUE}
+
+ver_pred <- predict(feds.tree3, newdata = ver)
+
+# We'll skip the confusion matrix in this case and just check the results.
+ver_pred
+
+```
+We can see that, out of the 11 disputed papers, the model classifies three as authored by Madison, one by Jay, and the remaining seven as a 50/50 chance being authored either by Hamilton or Hamilton *and* Madison!
+Overall, not a bad piece of work by the decision tree classifier. 

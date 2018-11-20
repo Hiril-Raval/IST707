@@ -1,0 +1,72 @@
+---
+title: "Martin_Alonso_HW6"
+author: "Martin Alonso"
+date: "November 19, 2018"
+output: 
+  word_document:
+    fig_width: 6
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# HW6 Instructions
+The data set comes from the Kaggle Digit Recognizer competition. The goal is to recognize digits 0 to 9 in handwritten images. Because the original data set is too large to be loaded in Weka GUI, I have systematically sampled 10% of the data by selecting the 10th, 20th examples and so on. You are going to use the sampled data to construct prediction models using naïve Bayes and decision tree algorithms. Tune their parameters to get the best model (measured by cross validation) and compare which algorithms provide better model for this task.  
+Due to the large size of the test data, submission to Kaggle is not required for this task. However, 1 extra point will be given to successful submissions. One solution for the large test set is to separate it to several smaller test set, run prediction on each subset, and merge all prediction results to one file for submission. You can also try use the entire training data set, or re-sample a larger sample.  
+
+## Section 1: Introduction
+As always, we will start by loading the data and exploring the data sets. 
+```{r tidy = TRUE}
+# Load the required packages.
+require(dplyr)
+require(caret)
+require(rpart)
+
+# Load the datasets
+trainSet <- read.csv('train.csv')
+testSet <- read.csv('test.csv')
+
+# The training set has 42,000 observations and 785 variables. 
+dim(trainSet)
+str(trainSet[, 1:10])
+summary(trainSet[, 1:10])
+
+# The dataset is also composed of a label, going from 0 to 9, and 784 pixel variables, all being ints. 
+# The same can be said of the test set, sans for the label, which it lacks. 
+```
+
+There is very little work to be done on the datasets before we start modeling the data. But, because of the size of the datasets, we will work with a subset of both of these. We'll use ten percent of the original training set to train our model, and ten percent of the original test set to test the model. 
+
+```{r tidy = TRUE}
+# We'll set the seed to assure reproducibility.
+set.seed(766)
+
+# We'll then randomly select ten percent of the training and testing sets.
+trainSplit <- sample(nrow(trainSet), nrow(trainSet) * .1)
+testSplit <- sample(nrow(testSet), nrow(testSet) * .1)
+
+# And now we'll select the rows and build our new sets.
+trainSet <- trainSet[trainSplit, ]
+testSet <- testSet[testSplit, ]
+```
+
+Aside from that, we are going to try to use the pixel information - which pixel lights up - to determine which number is formed, and use that to try and determine the correct labels for the test dataset. 
+
+## Section 2: Decision tree
+```{r tidy = TRUE}
+decTreeTrain <- rpart(label ~ ., data = trainSet, method = 'class', control = rpart.control(cp = 0))
+
+## Needs 3-fold CV.
+## Tune parameters
+## Get summary results
+## Test prediction
+
+
+```
+
+## Section 3: Naive bayes
+
+## Section 4: Algorithm performance comparison
+
+## Section 5: Kaggle test result
