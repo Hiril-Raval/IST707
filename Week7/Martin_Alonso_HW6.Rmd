@@ -22,6 +22,8 @@ As always, we will start by loading the data and exploring the data sets.
 require(dplyr)
 require(caret)
 require(rpart)
+require(e1071)
+require(stringr)
 
 # Load the datasets
 trainSet <- read.csv('train.csv')
@@ -47,26 +49,86 @@ trainSplit <- sample(nrow(trainSet), nrow(trainSet) * .1)
 testSplit <- sample(nrow(testSet), nrow(testSet) * .1)
 
 # And now we'll select the rows and build our new sets.
-trainSet <- trainSet[trainSplit, ]
-testSet <- testSet[testSplit, ]
+trainSubSet <- trainSet[trainSplit, ]
+testSubSet <- testSet[testSplit, ]
+
+row.names(trainSet) <- NULL
+row.names(testSet) <- NULL
 ```
 
 Aside from that, we are going to try to use the pixel information - which pixel lights up - to determine which number is formed, and use that to try and determine the correct labels for the test dataset. 
 
 ## Section 2: Decision tree
 ```{r tidy = TRUE}
-decTreeTrain <- rpart(label ~ ., data = trainSet, method = 'class', control = rpart.control(cp = 0))
+# Decision tree model
+decTreeTrain <- rpart(label ~ ., data = trainSubSet, method = 'class', 
+                      control = rpart.control(cp = 0), minsplit = 100, maxdepth = 10)
 
-## Needs 3-fold CV.
-## Tune parameters
-## Get summary results
-## Test prediction
+# Testing the accuracy of the tree on the training set
+trainPred <- data.frame(predict(decTreeTrain, trainSubSet))
+
+# Select the maximum likelihood number
+trainPred <- as.data.frame(names(trainPred[apply(trainPred, 1, which.max)]))
+colnames(trainPred) <- 'prediction'
+trainPred$number <- substr(trainPred$prediction, 2, 2)
 
 
+trainPred <- trainSubSet %>% bind_cols(trainPred) %>% select(label, number) %>% 
+  mutate(label = as.factor(label), number = as.factor(round(as.numeric(number), 0)))
+
+# Confusion matrix on the training dataset shows 86.9 percent accuracy.  
+confusionMatrix(trainPred$label, trainPred$number)
+
+# Let's run the prediction on the test set and see what we get. 
+testPred <- data.frame(predict(decTreeTrain, testSubSet))
+testPred <- as.data.frame(names(testPred[apply(testPred, 1, which.max)]))
+colnames(testPred) <- 'prediction'
+testPred$number <- substr(testPred$prediction, 2, 2)
+
+# Seems about even but we cannot test the results unless we run the decision tree on the entire test set and sumbmit it to Kaggle. 
+testComplete <- data.frame(predict(decTreeTrain, testSet))
+testComplete <- as.data.frame(names(testComplete[apply(testComplete, 1, which.max)]))
+colnames(testComplete) <- 'ImageId'
+testComplete$Label <- substr(testComplete$ImageId, 2, 2)
+testComplete$ImageId <- 1:nrow(testComplete)
+
+# Export the result set and run through Kaggle
+write.csv(testComplete, 'Decision Tree Test.csv')
 ```
 
+After submitting the test results to Kaggle, the score was 0.76071. Not bad for a first attempt but can be improved, given that the tree was built on ten percent of the testing data and has not been pruned after the initial pre-pruning process.  
+
 ## Section 3: Naive bayes
+Now that we have tried identifying the numbers using a decision tree, it is time to try our hand using the Naive Bayes algorithm. 
+
+```{r tidy = TRUE}
+# Build the classifier. 
+nbTrain <- naiveBayes(as.factor(label) ~ ., data = trainSubSet)
+
+# Again, test the results on the train set before submitting to Kaggle. 
+nbTrainPred <- predict(nbTrain, trainSubSet, type = 'class')
+confusionMatrix(nbTrainPred, as.factor(trainSubSet$label))
+
+# The results aren't as satisfactory - only 50.8 percent accuracy. But we'll still test it against the test set and check the results in Kaggle. 
+
+nbTestPred <- predict(nbTrain, testSet, type = 'class')
+nbTestPred <- data.frame(nbTestPred)
+colnames(nbTestPred)[1] <- 'Label'
+nbTestPred$ImageId <- 1:nrow(nbTestPred)
+nbTestPred <- nbTestPred %>% select(ImageId, Label)
+
+# Write the csv for Kaggle submission
+write.csv(nbTestPred, 'Naive Bayes Classifier.csv', row.names = FALSE)
+```
+
+There is still work to be done on the Naive Bayes algorithm. There was no tuning done which, using the caret package, might have built a more robust algorithm. As is, the results scored 0.4984 on Kaggle - not as good as the Decision Tree classifier. 
+
 
 ## Section 4: Algorithm performance comparison
+We can see by the Confusion matrices shown above that the decision tree does a better job at classifying the results as it is missing less on many numbers. The naive Bayes classifier, however, has a lot of trouble distinguishing between the number 2 and the other numbers, meaning that the algorithm needs more work. 
+But what has to be taken into account was that, due to available memory, only ten percent of the actual training set was used. This set was selected at random so, had we used another random set, or the entire training set, results might have been different. This is something worth investigating and pursuing, as it could lead to better results, given that the algorithms will have more data points from which to learn from. 
 
 ## Section 5: Kaggle test result
+The Kaggle test results were not great but they were quite encouraging. Having the decision tree score 0.7607 was a great first step that can be improved upon. 
+The naive Bayes algorithm, on the other hand, started off at 0.4984 - not a great result as it is almost a coin-toss between the actual result and the predicted result. The model needs further work, both in the data being used to build the classifier, and the tuning methods that can help with the model underfitting. 
+

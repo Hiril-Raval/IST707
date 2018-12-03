@@ -1,0 +1,58 @@
+---
+title: "Martin_Alonso_HW8"
+author: "Martin Alonso"
+date: "December 2, 2018"
+output: 
+  word_document:
+    fig_width: 6
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#HW8 Instructions
+Some people claimed that machine learning algorithms can figure out whether a person is lying or not. Do you believe that? To test this claim, we have collected a collection of customer reviews, some are true some are fake, and you are going to test how good multinomial NB and SVMs can be for fake review detection.
+
+This data set also has sentiment label for each review. You will also MNB and SVMs performance in sentiment classification.
+
+Explain your initial parameter tuning strategy (which parameter to tune, to what option, and theoretical foundation for your choice). Does your strategy help you get better results?
+
+Compare performance difference in sentiment classification and lie detection, and tell us which task is harder, and try to explain why.
+
+For each task, use GainRatio and Chi2 to rank the features and list top20 features from each method. Based on these top features, can you understand what patterns the classifiers have learned from the data? 
+
+# Data importation and preprocessing
+There were some errors in the data csv filed that were fixed prior to loading the final dataset. 
+
+```{r tidy = TRUE}
+# Load the dataset.
+df <- read.csv('deception_data_converted_final_fixed.csv', stringsAsFactors = FALSE, sep = ',', quote = "\"")
+
+# Check the structure, summary, and dimensions of the datasat.
+str(df)
+summary(df)
+dim(df)
+```
+
+It's not a relatively lange dataset, but it will need some cleaning. We'll load the packages that we'll need to work with the data.
+```{r tidy = TRUE}
+# Load the required packages.
+require(dplyr)
+require(stringr)
+require(tokenizers)
+require(caret)
+require(e1071)
+require(tm)
+require(tibble)
+```
+
+With the packages already loaded, we'll start tokenizing the comments
+```{r tidy = TRUE}
+
+```
+
+1. Vectorize the words to build a dictionary
+2. Tokenize words, stopwords = TRUE
+3. Lower case token words
+4. 
