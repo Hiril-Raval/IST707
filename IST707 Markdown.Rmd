@@ -1,0 +1,407 @@
+---
+title: "IST 707 Project"
+author: "Martin Alonso, Jimmy Chen"
+date: "11/28/2018"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+Every year, the NCAA women’s basketball teams play thousands of matches that will lead up to the popular March Madness championship. The championship consists of 64 teams and builds up from early October until February, where the top 16 teams per each of the four regions compete for the championship, with the final game usually played in March or April. As a result, a lot of data has been gathered over the years from these matches and can be used to try and predict the next champion.
+
+For this project, we've taken data from the NCAA Women's basketball tournaments, spanning from 1998 to 2017. These data include every game played for every season, whether the game was played at home or away, which team won, the final score, number of overtimes played, and if the game was part of the regular season or March Madness. 
+
+# The Dataset
+The dataset was obtain from the 2018 Women’s NCAA March Madness (https://www.kaggle.com/c/womens-machine-learning-competition-2018/data) Kaggle competition, and is conformed of 9 comma-separated value (CSV) files with a variety of data columns. However, for the purpose of this project, only relevant columns will be used to predict tournament results. Examples of variables that will be used include: season, day season started, day number, winning and losing teams, winning and losing team scores, seeds (for tournament games), number of overtimes played, cities were the game was played, and whether the winning team won at home, away, or on neutral ground.
+
+The data goes all the way back to 1998 and reaches 2017. This will allow us to discover team trends over time. However, we will probably restrict ourselves to the most recent year of data to create the predictive model because sports teams tend to vary in overall greatness over time due to players, coaches, and other factors changing. By now, the 2018 data has been released and can be used to cross validate results from the predictive models with the actual competition results. 
+
+## Data Preprocessing
+We will start by loading the required packages that will be used for this project and explain why they will be used. 
+* dplyr: data manipulation package that will allow us to view and explore the data.
+* plyr: tools that allow for data manipulation.
+* tidyr: package that allows us to build datasets that conform to Hadley Wickham's tidy dataset structure.
+* lubridate: package that allows date manipulation. 
+* ggplot2: grammar of graphics package for exploratory data analysis, used to discover potential trends in the data.
+* caret: package housing different modeling algorithms. Will be used to create the random forest and SVM models.
+* randomForest: package that will allow us to build a random forest model with assistance from the caret package. 
+
+# Objective
+Our objective is to take these data points and try to build a model that is capable of correctly predicting the score of the winning team for the 2017 women's basketball season, an objective that is based on the Kaggle March Madness competition held in February 2017. We believe that by using three different models - two which we have seen in class and one which we have discovered outside of class. Our goal will be able to successfully predict over 75 percent of the match outcomes. We will use data from 1998-2016 as the training set to build the model, and the 2017 season will be the testing set. 
+
+For this project, we will be using the following three models: Random Forest, Support Vector Machine, and Linear Regression.  
+
+## Load required packages
+```{r echo = TRUE, results = 'hide', message = FALSE, warning = FALSE}
+require(dplyr)
+require(plyr)
+require(tidyr)
+require(lubridate)
+require(ggplot2)
+require(caret)
+require(e1071)
+require(randomForest)
+```
+
+With the said packages loaded, it is time to import the datasets that we'll use for this project. 
+Kaggle provides nine datasets in comma-separated value format. These csvs contain information on the team cities, the cities in which games were played, NCAA tournament results, tournament seeds, tournament slots, regular season results, seasons, teams, and team names. 
+
+For the sake of this project, we will load all the csvs but we will not use all these. 
+
+## Load the data files
+```{r}
+# Load csv files
+cities <- read.csv('WCities.csv')
+gameCities <- read.csv('WGameCities.csv')
+compactResults <- read.csv('WNCAATourneyCompactResults.csv')
+seeds <- read.csv('WNCAATourneySeeds.csv')
+slots <- read.csv('WNCAATourneySlots.csv')
+regSeasonResults <- read.csv('WRegularSeasonCompactResults.csv')
+season <- read.csv('WSeasons.csv')
+teams <- read.csv('WTeams.csv')
+teamSpellings <- read.csv('WTeamSpellings.csv')
+```
+
+With the files loaded, we will now move on to create a master file that will serve us when building the model. 
+
+## Data preparation
+```{r tidy = TRUE}
+# Add columns to files
+regSeasonResults$gameType <- 'regularSeason'
+compactResults$gameType <- 'tournament'
+
+compactResults <- compactResults %>% 
+  left_join(seeds, by = c('Season'='Season', 'WTeamID' = 'TeamID'))
+colnames(compactResults)[10] <- 'WTeamSeed'
+
+compactResults <- compactResults %>% 
+  left_join(seeds, by = c('Season'='Season', 'LTeamID' = 'TeamID'))
+colnames(compactResults)[11] <- 'LTeamSeed'
+
+seasonNew <- gather(season, key = Season, value = Region, c(RegionW, RegionY, RegionX, RegionZ))
+colnames(seasonNew) <- c('DayZero', 'Region', 'Title')
+seasonNew$DayZero <- as.Date(as.character(seasonNew$DayZero), '%m/%d/%Y')
+
+seasonNew <- seasonNew %>% 
+  mutate(season = year(DayZero), 
+         seed = substr(Region, 7, 7))
+
+# Create a master dataset 
+master <- regSeasonResults %>% bind_rows(compactResults)
+
+master <- master %>% 
+  dplyr::left_join(season, by = c('Season' = 'Season')) %>% 
+  dplyr::select(-RegionW, -RegionX, -RegionY, -RegionZ)
+master$DayZero <- as.Date(as.character(master$DayZero), format = '%m/%d/%Y')
+master$gameDay <- master$DayNum + master$DayZero
+
+master <- master %>% 
+  dplyr::mutate(WRegion = substr(WTeamSeed, 1, 1), 
+         LRegion = substr(LTeamSeed, 1, 1)) %>% 
+  dplyr::left_join(seasonNew, by = c('Season'='season', 'WRegion'='seed')) %>% 
+  dplyr::left_join(seasonNew, by = c('Season'='season', 'LRegion'='seed')) %>%
+  dplyr::select(-DayZero, -WRegion, -LRegion, -DayZero.y, -Region.x, -Region.y) %>%
+  dplyr::group_by(Season, WTeamID, LTeamID) %>%
+  dplyr::mutate(meeting = 1:n()) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(gameId = paste0(Season, '_', WTeamID, '_', LTeamID, '_', meeting)) %>% 
+  dplyr::select(Season, DayZero.x, gameDay, DayNum, gameId, WTeamID, WScore, LTeamID, LScore, WLoc, NumOT, gameType, 
+         WTeamSeed, LTeamSeed, WRegion = Title.x, LRegion = Title.y)
+colnames(master)[2] <- 'DayZero'
+```
+
+Now that we have the master file ready, we'll group by team and calculate each team's offensive and defensive ratings, and the average point spread by which they beat - or lose to - their opponents.
+
+We start by selecting the winning team, their score, and the score of the losing team. These last two will be the points scored and points allowed, and will be used to calculate each team's offensive rating (OR) and defensive rating (DR).
+
+```{r tidy = TRUE}
+homeTeam <- master %>%
+  dplyr::select(Season, gameId, Team1 = WTeamID, Team2 = LTeamID, PointsScored = WScore, PointsAllowed = LScore)
+awayTeam <- master %>% 
+  dplyr::select(Season, gameId, Team1 = LTeamID, Team2 = WTeamID, PointsScored = LScore, PointsAllowed = WScore)
+
+totalTeam <- homeTeam %>% bind_rows(awayTeam) %>% arrange(gameId)
+totalTeamDedup <- totalTeam[!duplicated(totalTeam$gameId), ]
+
+# First we'll calculate average points scored and allowed by the league. This needs to be done by season to account for the offensive and defensive shifts of all the teams. 
+totalTeam <- totalTeamDedup %>% 
+  dplyr::group_by(Season) %>% 
+  dplyr::mutate(lgPS = mean(PointsScored), lgPA = mean(PointsAllowed)) %>% 
+  dplyr::ungroup()
+
+# Then, we'll create Team1's OR, DR and point spread... 
+totalTeam <- totalTeam %>% 
+  dplyr::group_by(Season, Team1) %>% 
+  dplyr::mutate(T1OR = mean(PointsScored)/lgPS, 
+         T1DR = mean(PointsAllowed)/lgPA,
+         T1PointSpread = mean(PointsScored) - mean(PointsAllowed)) %>%
+  # ...followed by Team2's OR and DR.
+  dplyr::ungroup() %>% 
+  dplyr::group_by(Season, Team2) %>% 
+  dplyr::mutate(T2OR = mean(PointsAllowed)/lgPA,
+         T2DR = mean(PointsScored)/lgPS,
+         T2PointSpread = mean(PointsAllowed - mean(PointsScored))) %>%
+  dplyr::ungroup()
+```
+
+We calculate these ratings because it gives us a better idea of how good or bad the team was relative to the league's offensive and defensive environment. The mean for both these ratings is 1, meaning that anybody below 1 is below average, while those above are above average. Point spread will give us the average margin of victory or defeat for each team. 
+
+With each team's OR, DR, and point spread calculated, we'll merge it back into the master file and calculate the expected results for each match (what a team should have ideally scored given the other team's neutral stats.)
+
+```{r tidy = TRUE}
+master <- master %>% 
+  dplyr::left_join(totalTeam, by = c('Season' = 'Season', 'gameId' = 'gameId')) %>% 
+  dplyr::select(Season, gameId, DayZero, gameDay, DayNum, WTeamID, WScore, LTeamID, LScore, WLoc, NumOT, gameType, WTeamSeed,
+         LTeamSeed, WRegion, LRegion, lgPS, lgPA, WTeamOR = T1OR, WTeamDR = T1DR, WTeamPointSpread = T1PointSpread,
+         LTeamOR = T2OR, LTeamDR = T2DR, LTeamPointSpread = T2PointSpread) %>%
+  as.data.frame()
+
+head(master)
+```
+
+We finally have a dataset that we can work on. From here on out we'll do some additional data exploration and start building the model. 
+
+# Exploratory data analysis
+
+To get an idea of the strong teams in the league, the top ten teams based on the total amount of matches won are plotted below.
+
+```{r}
+# Generating win count by teams
+teamWins <- count(master, "WTeamID")
+teamWins <- merge(teamWins, teams, by.x = "WTeamID", by.y = "TeamID")
+teamWins <- teamWins[order(-teamWins$freq),]
+teamWins <- teamWins[1:10,]
+
+ggplot(data = teamWins, aes(x = TeamName, y = freq)) + 
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Top 10 Winning Teams", x = "Team", y = "Games Won") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+head(teamWins)
+```
+
+Next, we will explore the winning rates of these top teams.
+
+```{r}
+# Generating W/L proportions of top 10 teams
+teamWins <- count(master, "WTeamID")
+teamLoses <- count(master, "LTeamID")
+
+teamWL <- merge(teamWins, teamLoses, by.x = "WTeamID", by.y = "LTeamID")
+teamWL <- teamWL[order(-teamWL$freq.x),]
+teamWL <- teamWL[1:10,]
+
+teamWL <- merge(teamWL, teams, by.x = "WTeamID", by.y = "TeamID")
+teamWL <- teamWL[order(-teamWL$freq.x),]
+
+teamWL$WinPercentage <- (teamWL$freq.x)/(teamWL$freq.x + teamWL$freq.y)
+teamWL$LosePercentage <- (teamWL$freq.y)/(teamWL$freq.x + teamWL$freq.y)
+colnames(teamWL) <- c("TeamID", "Wins", "Loses", "TeamName", "WinPercentage", "LosePercentage")
+
+ggplot(data = teamWL, aes(x = TeamName, y = WinPercentage)) + 
+  geom_bar(stat = "identity", fill = "forestgreen") +
+  labs(title = "Winning Percentage of All Games Played by Top 10 Teams", x = "Team", y = "Win Percentages") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+As shown above, the top winning teams all have significantly higher win rate. The winning teams average a 75 winning percentage.
+
+Next, let's analyze the performance of the winning teams and the losing teams. Offensive ratings and defensive ratings had been calculated for each winning and losing team. These ratings are on a percentage scale, meaning if a team has a performance rating above 1, they are above average, and below average if their rating is under 1.
+
+```{r}
+Wratings <- master %>% 
+  dplyr::select(WTeamID, WTeamOR, WTeamDR) %>% 
+  dplyr::mutate(TeamFlag = 'W') %>% 
+  dplyr::select(TeamFlag, TeamId = WTeamID, TeamOR = WTeamOR, TeamDR = WTeamDR)
+Lratings <- master %>% 
+  dplyr::select(LTeamID, LTeamOR, LTeamDR) %>% 
+  dplyr::mutate(TeamFlag = 'L') %>% 
+  dplyr::select(TeamFlag, TeamId = LTeamID, TeamOR = LTeamOR, TeamDR = LTeamDR)
+
+ratings <- Wratings %>% bind_rows(Lratings)
+
+# Comparing offensive ratings
+ggplot(data = ratings, aes(x = as.factor(TeamFlag), y = TeamOR, fill = as.factor(TeamFlag))) + 
+  geom_boxplot() +
+  ggtitle("Offensive rating by W/L Teams") + 
+  labs(x = 'Team', y = 'Offensive Rating', fill = 'Team') +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Comparing defensive ratings
+ggplot(data = ratings, aes(x = as.factor(TeamFlag), y = TeamDR, fill = as.factor(TeamFlag))) + 
+  geom_boxplot() +
+  ggtitle("Defensive rating by W/L Teams") + 
+  labs(x = 'Team', y = 'Defensive Rating', fill = 'Team') +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+The boxplots above shown some interesting information about the teams' performance ratings. 
+First, we want to point out that, on average, losing teams tend to have higher offensive ratings. Perhaps the reason for this is because they are highly aggresive offensively, leaving their defense open and allowing opposing teams to score. In the end, the old mantra might prove to be true: defense wins championships. 
+And, if we look at the boxplot for defensive ratings, we find that indeed the spread of defensive ratings for winning teams is larger, which may indeed support the hypothesis drawn from the first boxplot. 
+
+
+# Modeling
+
+We'll now turn to building the models to predict which team is likelier to win given it's OR, DR, and point spread.
+It's also time to split the datasets.
+Because of the size of the data, we'll only use the years 2008 through 2016 as the training set, and the 2017 data as the testing set.
+
+```{r tidy = TRUE}
+# The training set will consist of games played before 2017, while the testing set will contain games played in 2017
+trainSet <- master %>% 
+  dplyr::filter(Season >= 2008 & Season < 2017)
+
+testSet <- master %>% 
+  dplyr::filter(Season == 2017)
+```
+
+Though not a conventional split of the data, we want to see if we are able to predict a season worth of games.
+
+## Linear Regression Model
+
+Often, many seek to predict the winning score for a particular match. While not encourage, some people make bets on how much higher a team's score will be - their spread. Similarly, people generally want to know the winning score beforehand to know what they should expect.
+
+Thus, a linear regression model is built to predict the winning score based on each team's offensive rating, defensive rating, and point spread, along side the losing team's ID. 
+
+```{r}
+# Linear Regression to predict the winning score
+
+# Fitting the regression
+fit.reg <- lm(WScore ~ LTeamID + LScore + WTeamOR + WTeamDR + LTeamOR + LTeamDR + WTeamPointSpread + LTeamPointSpread, data = trainSet)
+summary(fit.reg)
+
+# Visualizing some detail about the regression
+layout(matrix(c(1,2,3,4),2,2))
+plot(fit.reg)
+```
+
+As shown from the regression summary, all variable are significant in determining the winning score of the match. It's important to point out that the winning team's offensive rating is the least significant of the coefficients, while the winning team's defensive rating, and the losing team's offensive rating seem to be more predictive of the final score. From the residual plots, we can see that the data points in the regression are randomly distributed, which implies that the variables are not correlated.
+
+However, it must be noted that the adjusted R-square is farily low for the model at 0.5339. While this is not a high R-square value, it is understandable that the variables in the regression only account for 53.39% of the winning score. Sports are highly variable in nature, and are therefore hard to predict. Thus, the R-square value is acceptable in this instance.
+
+However, let's see how the actual scores compare to the predicted scores.
+
+```{r tidy = TRUE}
+predictLm <- data.frame('predict' = predict(fit.reg, newdata = testSet))
+LmResults <- testSet %>% 
+  dplyr::bind_cols(predictLm)
+
+# Root mean squeared error 
+RMSE(LmResults$predict, LmResults$WScore)
+
+# Plot the results for comparison
+ggplot(LmResults, aes(x = WScore, y = predict)) +
+  geom_point() + 
+  geom_smooth(method = 'lm') + 
+  labs(x = 'Actual Score', y = 'Predicted Score') +
+  ggtitle('Predicted vs Actual Scores', subtitle = '2017 Season') +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+
+
+```
+
+The root mean squared error shows that the the WScore is overall off by 7.9 points in either direction which, as we can, see by the graph, is not bad. 
+There's a cluster of scores and a positive relationship when comparing these scores. The model's predictions appear to be in line with the actual score but they are not 100 percent spot on. We'll see if we can do better using other methods. 
+
+## Random Forest
+
+Let's try to improve the model by building a random forest. 
+We'll first set the training parameters to check the number of variables that we'll need and the number of trees that we'll build for the algorithm. 
+
+```{r tidy = TRUE}
+oob.err <- double(10)
+test.err <- double(10)
+
+for(mtry in 1:10){
+  rf <- randomForest(WScore ~ LTeamID + LScore + WTeamOR + WTeamDR + LTeamOR + LTeamDR + WTeamPointSpread + LTeamPointSpread + lgPS + lgPA, data = trainSet, mtry = mtry, ntree = 10) 
+  #Error of all trees
+  oob.err[mtry] = rf$mse[10] 
+  
+  #Predictions on Test Set for each Tree
+  pred <- predict(rf, testSet) 
+  test.err[mtry]= with(testSet, mean((WScore - pred)^2))
+}
+```
+
+Checking this plot, we can see that the number of variables is ideally 6. 
+
+```{r tidy = TRUE}
+matplot(1:mtry , cbind(oob.err,test.err), pch=19 , col=c("red", "blue"), type="b", ylab = "Mean Squared Error", xlab = "Number of Predictors Considered at each Split") 
+legend("topright", legend = c("Out of Bag Error", "Test Error"), pch = 19, col = c("red", "blue"))
+```
+
+We'll once again train the model, accounting for mtry = 6, and use that value to generate the random forest. However, we will now grow 100 trees instead of ten. 
+
+```{r tidy = TRUE}
+rfTrain <- randomForest(WScore ~ LTeamID + LScore + WTeamOR + WTeamDR + LTeamOR + LTeamDR + WTeamPointSpread + LTeamPointSpread + lgPS + lgPA, data = trainSet, mtry = 6, ntree = 100)
+
+rfTrain
+```
+
+In this case, the random forest regression is tells us that the variables chosen for the tree explain 55.16% of the variability in the model - a slight improvement over the previous model. Let's check with the test set. 
+
+```{r tidy = TRUE}
+rfPred <- predict(rfTrain, newdata = testSet)
+rfPred <- data.frame('predict' = rfPred)
+
+rfResults <- testSet %>% bind_cols(rfPred)
+
+# And now to check the RMSE and the plot
+RMSE(rfResults$predict, rfResults$WScore)
+
+ggplot(rfResults, aes(x = WScore, y = predict)) +
+  geom_point() + 
+  geom_smooth(method = 'lm') + 
+  labs(x = 'Actual Score', y = 'Predicted Score') +
+  ggtitle('Predicted vs Actual Scores', subtitle = '2017 Season') +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+```
+
+The plot seems to be almost identical, but the RMSE shows us a slight improvement of four percent, reducing the margin of error from 7.9 to 7.58. 
+
+## Support Vector Machine
+
+We'll try one last model to see whether we can improve our predictions a bit more. 
+```{r tidy = TRUE}
+svmTrain <- svm(WScore ~ LTeamID + LScore + WTeamOR + WTeamDR + LTeamOR + LTeamDR + WTeamPointSpread + LTeamPointSpread + lgPS + lgPA, data = trainSet, type = 'eps', kernel = 'linear', cross = 3, probability = TRUE)
+
+summary(svmTrain)
+
+```
+
+The model looks good. Time to check the results on the testing set.
+
+```{r tidy = TRUE}
+testSet2 <- testSet2 <- testSet %>% dplyr::select(LTeamID, LScore, WTeamOR, WTeamDR, LTeamOR, LTeamDR, WTeamPointSpread, LTeamPointSpread, lgPS, lgPA)
+svmPred <- predict(svmTrain, newdata = testSet2)
+svmPred <- data.frame('predict' = svmPred)
+
+svmResults <- testSet %>% bind_cols(svmPred)
+
+RMSE(svmResults$predict, svmResults$WScore)
+
+ggplot(svmResults, aes(x = WScore, y = predict)) +
+  geom_point() + 
+  geom_smooth(method = 'lm') + 
+  labs(x = 'Actual Score', y = 'Predicted Score') +
+  ggtitle('Predicted vs Actual Scores', subtitle = '2017 Season') +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+```
+
+It turns out that the SVM is the worst of the three models because, even though it seems as it predicts the same results as the random forest and linear regression, for higher scores, the predictions become more volatile. 
+
+# Conclusions
+Though these are just three of the models that we tested, we talked about building more models that could potentially improve the prediction. Models discussed were the popular Kaggle algorithms Generalized Additive Models and eXtreme Gradient Boosting, but due to time constraints we couldn't use them. However, we believe that it would be interesting to revisit these algorithms in the future. 
+Another conclusion that we've drawn is that, even though we have a lot of data, it would be interesting to see other additions to the dataset. Shooting percentage, fouls per game, number of triples and rebounds, are among the statistics that could improve the model, as they could give us a clearer idea on how a team both attacks and defends. Including more data into the training of the model could increase the accuracy of our results. 
+Finally, of our three models, we were surprised that the random forest model was the most succesful of the three. Initially, we thought the best model would be the SVM, followed closely by the linear regression. It turns out that it was the other way round, with the SVM having a RMSE of 7.96, the linear regression a RMSE of 7.89, and the random forest a RMSE of 7.58. 
+However, this is only part of what ideally we would've want to achieve since, what is more useful is to determine which side actually won and this is what in the end should be our aim. For the meantime, we are content that we could predict the winning team's score to within 7.5 points of their actual score. 
